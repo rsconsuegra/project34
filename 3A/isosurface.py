@@ -225,6 +225,8 @@ class Visualization(object):
 
 		# Render
 		interactive_ren.Initialize()
+		render_window.SetSize(800, 600)
+		render_window.SetWindowName("Project 3a: Isocontours - Pedro Acevedo & Randy Consuegra")
 		render_window.Render()
 		interactive_ren.Start()
 

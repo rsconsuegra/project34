@@ -3,13 +3,32 @@
 import vtk
 import argparse
 
-
-DEFAULT_COLORMAP = [[0, 1, 1, 1], [2500, 1, 1, 1], [109404, 1, 0, 0]]
-DEFAULT_PLANE_POS = [0, 0, 0]
-
+GRAD_MAX = 109404
 
 class Visualization(object):
-	"""docstring for Visualization"""
+	"""docstring for Visualizatoin"""
+
+	def isovalueSliderHandler(self, obj, event):
+		self.isovalue = obj.GetRepresentation().GetValue()
+		self.ct_contour.SetValue(0, self.isovalue)
+
+	def gminSliderHandler(self, obj, event):
+		self.gmin = obj.GetRepresentation().GetValue()
+		if self.gmin>=self.gmax:
+			self.gmin = self.gmax-1
+			self.gminSlider.SetValue(self.gmin)
+
+		self.gm_clipper_min.SetValue(self.gmin)
+		self.gm_clipper_min.Update()
+
+	def gmaxSliderHandler(self, obj, event):
+		self.gmax = obj.GetRepresentation().GetValue()
+		if self.gmin>=self.gmax:
+			self.gmax = self.gmin+1
+			self.gmaxSlider.SetValue(self.gmax)
+
+		self.gm_clipper_max.SetValue(self.gmax)
+		self.gm_clipper_max.Update()
 
 	def clipXSliderHandler(self,obj, event):
 		self.clip_x = obj.GetRepresentation().GetValue()
@@ -33,8 +52,7 @@ class Visualization(object):
 
 	def __init__(self, args):
 		## Files reading and settings
-		self.isovalues = args.isoval
-		self.cmap = args.cmap
+		self.isovalue = args.val
 
 		self.clip_x = args.clip[0]
 		self.clip_y = args.clip[1]
@@ -49,17 +67,9 @@ class Visualization(object):
 		gm_image.Update()
 
 		self.ct_contour = vtk.vtkContourFilter()
-		self.ct_contour.SetInputConnection(ct_image.GetOutputPort());
 		self.ct_contour.ComputeNormalsOn()
-
-		for i in range(len(self.isovalues)):
-			self.ct_contour.SetValue(i, self.isovalues[i])
-
-			
-		color_func = vtk.vtkColorTransferFunction()
-		color_func.SetColorSpaceToRGB()
-		for c in self.cmap:
-			color_func.AddRGBPoint(c[0], c[1], c[2], c[3])
+		self.ct_contour.SetValue(0, self.isovalue)
+		self.ct_contour.SetInputConnection(ct_image.GetOutputPort());
 
 		#Cutting planes
 		self.plane_x = vtk.vtkPlane()
@@ -87,43 +97,137 @@ class Visualization(object):
 		probe_filter.SetSourceConnection(gm_image.GetOutputPort())
 		probe_filter.SetInputConnection(self.clipper_z.GetOutputPort())
 
-		color_mapper = vtk.vtkPolyDataMapper()
-		color_mapper.SetLookupTable(color_func)
-		color_mapper.SetInputConnection(probe_filter.GetOutputPort())
-		color_mapper.SetScalarRange(probe_filter.GetOutput().GetScalarRange())
+		gmrange = probe_filter.GetOutput().GetScalarRange()
+		self.gmin = gmrange[0]
+		self.gmax = GRAD_MAX
+
+		self.gm_clipper_min = vtk.vtkClipPolyData()
+		self.gm_clipper_min.SetInputConnection(probe_filter.GetOutputPort())
+		self.gm_clipper_min.InsideOutOff()
+		self.gm_clipper_min.SetValue(self.gmin)
+
+		self.gm_clipper_max = vtk.vtkClipPolyData()
+		self.gm_clipper_max.SetInputConnection(self.gm_clipper_min.GetOutputPort())
+		self.gm_clipper_max.InsideOutOn()
+		self.gm_clipper_max.SetValue(int(self.gmax))
+
+		colorTrans = vtk.vtkColorTransferFunction()
+		colorTrans.SetColorSpaceToRGB()
+		colorTrans.AddRGBPoint(0, 1, 1, 1)
+		colorTrans.AddRGBPoint(2500, 1, 1, 1)
+		colorTrans.AddRGBPoint(109404, 1, 0, 0)
+
+		mapper = vtk.vtkPolyDataMapper()
+		mapper.SetInputConnection(self.gm_clipper_max.GetOutputPort())
+		mapper.SetLookupTable(colorTrans)
+
+		actor = vtk.vtkActor()
+		actor.GetProperty().SetRepresentationToWireframe()
+		actor.SetMapper(mapper)
 
 		colorBar = vtk.vtkScalarBarActor()
-		colorBar.SetLookupTable(color_mapper.GetLookupTable())
-		colorBar.SetTitle("Gradient")
-		colorBar.SetNumberOfLabels(5)
+		colorBar.SetLookupTable(colorTrans)
+		colorBar.SetTitle("gradient magnitude ")
+		colorBar.SetNumberOfLabels(6)
 		colorBar.SetLabelFormat("%4.0f")
 		colorBar.SetPosition(0.9, 0.1)
-		colorBar.SetWidth(0.08)
-		colorBar.SetHeight(0.6)
-
-		color_actor=vtk.vtkActor()
-		#color_actor.GetProperty().SetRepresentationToWireframe()
-		color_actor.SetMapper(color_mapper)
+		colorBar.SetWidth(0.1)
+		colorBar.SetHeight(0.7)
 
 		backFaces = vtk.vtkProperty()
 		backFaces.SetSpecular(0)
 		backFaces.SetDiffuse(0)
 		backFaces.SetAmbient(0)
 		backFaces.SetAmbientColor(1,0,0)
-		color_actor.SetBackfaceProperty(backFaces)
-		
+		actor.SetBackfaceProperty(backFaces)
+
 		ren = vtk.vtkRenderer()
 		renWin = vtk.vtkRenderWindow()
 		renWin.AddRenderer(ren)
 		iren = vtk.vtkRenderWindowInteractor()
 		iren.SetRenderWindow(renWin)
 
-		ren.AddActor(color_actor)
+		ren.AddActor(actor)
 		ren.AddActor(colorBar)
 		ren.ResetCamera()
 		ren.SetBackground(0.2,0.3,0.4)
 		ren.ResetCameraClippingRange()
 		renWin.SetSize(1200, 600)
+
+		self.gminSlider = vtk.vtkSliderRepresentation2D()
+		self.gminSlider.SetMinimumValue(self.gmin)
+		self.gminSlider.SetMaximumValue(self.gmax)
+		self.gminSlider.SetValue(self.gmin)
+		self.gminSlider.SetTitleText("gradmin")
+		self.gminSlider.GetPoint1Coordinate().SetCoordinateSystemToNormalizedDisplay()
+		self.gminSlider.GetPoint1Coordinate().SetValue(0.0, 0.6)
+		self.gminSlider.GetPoint2Coordinate().SetCoordinateSystemToNormalizedDisplay()
+		self.gminSlider.GetPoint2Coordinate().SetValue(0.2, 0.6)
+		self.gminSlider.SetSliderLength(0.02)
+		self.gminSlider.SetSliderWidth(0.03)
+		self.gminSlider.SetEndCapLength(0.01)
+		self.gminSlider.SetEndCapWidth(0.03)
+		self.gminSlider.SetTubeWidth(0.005)
+		self.gminSlider.SetLabelFormat("%3.0lf")
+		self.gminSlider.SetTitleHeight(0.02)
+		self.gminSlider.SetLabelHeight(0.02)
+		self.gminSliderWidget = vtk.vtkSliderWidget()
+		self.gminSliderWidget.SetInteractor(iren)
+		self.gminSliderWidget.SetRepresentation(self.gminSlider)
+		self.gminSliderWidget.KeyPressActivationOff()
+		self.gminSliderWidget.SetAnimationModeToAnimate()
+		self.gminSliderWidget.SetEnabled(True)
+		self.gminSliderWidget.AddObserver("EndInteractionEvent", self.gminSliderHandler)
+
+		self.gmaxSlider = vtk.vtkSliderRepresentation2D()
+		self.gmaxSlider.SetMinimumValue(self.gmin)
+		self.gmaxSlider.SetMaximumValue(self.gmax)
+		self.gmaxSlider.SetValue(self.gmax)
+		self.gmaxSlider.SetTitleText("gradmax")
+		self.gmaxSlider.GetPoint1Coordinate().SetCoordinateSystemToNormalizedDisplay()
+		self.gmaxSlider.GetPoint1Coordinate().SetValue(0.0, 0.5)
+		self.gmaxSlider.GetPoint2Coordinate().SetCoordinateSystemToNormalizedDisplay()
+		self.gmaxSlider.GetPoint2Coordinate().SetValue(0.2, 0.5)
+		self.gmaxSlider.SetSliderLength(0.02)
+		self.gmaxSlider.SetSliderWidth(0.03)
+		self.gmaxSlider.SetEndCapLength(0.01)
+		self.gmaxSlider.SetEndCapWidth(0.03)
+		self.gmaxSlider.SetTubeWidth(0.005)
+		self.gmaxSlider.SetLabelFormat("%3.0lf")
+		self.gmaxSlider.SetTitleHeight(0.02)
+		self.gmaxSlider.SetLabelHeight(0.02)
+		self.gmaxSliderWidget = vtk.vtkSliderWidget()
+		self.gmaxSliderWidget.SetInteractor(iren)
+		self.gmaxSliderWidget.SetRepresentation(self.gmaxSlider)
+		self.gmaxSliderWidget.KeyPressActivationOff()
+		self.gmaxSliderWidget.SetAnimationModeToAnimate()
+		self.gmaxSliderWidget.SetEnabled(True)
+		self.gmaxSliderWidget.AddObserver("EndInteractionEvent", self.gmaxSliderHandler)
+
+		isovalueSlider = vtk.vtkSliderRepresentation2D()
+		isovalueSlider.SetMinimumValue(500/5)
+		isovalueSlider.SetMaximumValue(1500/5)
+		isovalueSlider.SetValue(self.isovalue)
+		isovalueSlider.SetTitleText("isovalue")
+		isovalueSlider.GetPoint1Coordinate().SetCoordinateSystemToNormalizedDisplay()
+		isovalueSlider.GetPoint1Coordinate().SetValue(0.0, 0.4)
+		isovalueSlider.GetPoint2Coordinate().SetCoordinateSystemToNormalizedDisplay()
+		isovalueSlider.GetPoint2Coordinate().SetValue(0.2, 0.4)
+		isovalueSlider.SetSliderLength(0.02)
+		isovalueSlider.SetSliderWidth(0.03)
+		isovalueSlider.SetEndCapLength(0.01)
+		isovalueSlider.SetEndCapWidth(0.03)
+		isovalueSlider.SetTubeWidth(0.005)
+		isovalueSlider.SetLabelFormat("%3.0lf")
+		isovalueSlider.SetTitleHeight(0.02)
+		isovalueSlider.SetLabelHeight(0.02)
+		SliderWidget1 = vtk.vtkSliderWidget()
+		SliderWidget1.SetInteractor(iren)
+		SliderWidget1.SetRepresentation(isovalueSlider)
+		SliderWidget1.KeyPressActivationOff()
+		SliderWidget1.SetAnimationModeToAnimate()
+		SliderWidget1.SetEnabled(True)
+		SliderWidget1.AddObserver("EndInteractionEvent", self.isovalueSliderHandler)
 
 		clipXSlider = vtk.vtkSliderRepresentation2D()
 		clipXSlider.SetMinimumValue(0)
@@ -203,39 +307,21 @@ class Visualization(object):
 		# Render
 		iren.Initialize()
 		renWin.SetSize(800, 600)
-		renWin.SetWindowName("Project 3b: Isocontours - Pedro Acevedo & Randy Consuegra")
+		renWin.SetWindowName("Project 4a: Isocontours - Pedro Acevedo & Randy Consuegra")
 		renWin.Render()
 		iren.Start()
 
 
-def readFromFile(name):
-	information = list()
-	with open(name, "r") as f:
-		for line in f.readlines():
-			li = line.strip()
-			if not li.startswith("#"):
-				var = line.split()
-				if(len(var) == 1):
-					information.extend([int(var[0])])
-				else:
-					information.append([int(i) for i in var])
-	return information
 
 if __name__ == "__main__":
+	# --define argument parser and parse arguments--
 	parser = argparse.ArgumentParser()
 	parser.add_argument('data', help='File with 3D scalar dataset')
 	parser.add_argument('gradmag', help='File with gradient magnitude')
-	parser.add_argument('isoval', help='txt with isovalues')
-	parser.add_argument('--cmap', type=str, metavar='filename', help='input colormap file', default='NULL')
+	parser.add_argument('--val', type=int, help='Initial isovalue',
+		metavar='int', default=500)
 	parser.add_argument('--clip', type=int, metavar='int', nargs=3,
-						help='initial positions of clipping planes', default=DEFAULT_PLANE_POS)
+						help='initial positions of clipping planes', default=[0, 0, 0])
 	args = parser.parse_args()
-
-	args.isoval = readFromFile(args.isoval)
-
-	if args.cmap != 'NULL':
-		args.cmap = readFromFile(args.cmap)
-	else:
-		args.cmap = DEFAULT_COLORMAP
 
 	Visualization(args = args)
