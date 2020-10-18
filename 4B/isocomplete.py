@@ -222,8 +222,7 @@ class Visualization(object):
 
 		# Render
 		iren.Initialize()
-		renWin.SetSize(800, 600)
-		renWin.SetWindowName("Project 4b: Isocontours - Pedro Acevedo & Randy Consuegra")
+		renWin.SetWindowName("Project 4b: GeoVisualization - Pedro Acevedo & Randy Consuegra")
 		renWin.Render()
 		iren.Start()
 
