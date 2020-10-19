@@ -27,7 +27,7 @@ class Visualization(object):
 		self.plane_x.SetOrigin((self.clip_x,0,0))
 		self.plane_y.SetOrigin(0,self.clip_y,0)
 		self.plane_z.SetOrigin(0,0,self.clip_z)
-		
+
 		for i in range(len(self.clipper_X)):
 			self.clipper_X[i].Update()
 			self.clipper_Y[i].Update()
@@ -44,7 +44,7 @@ class Visualization(object):
 		color_fun.SetColorSpaceToRGB()
 		color_fun.AddRGBPoint(isovalue, cmap[0], cmap[1],cmap[2])
 
-		
+
 		clipper_x = vtk.vtkClipPolyData()
 		clipper_x.SetClipFunction(self.plane_x)
 		clipper_x.SetInputConnection(contour.GetOutputPort())
@@ -73,7 +73,7 @@ class Visualization(object):
 		gm_clipper_max.SetInputConnection(gm_clipper_min.GetOutputPort())
 		gm_clipper_max.InsideOutOn()
 		gm_clipper_max.SetValue(int(gmax))
-		
+
 		color_mapper = vtk.vtkPolyDataMapper()
 		color_mapper.SetLookupTable(color_fun)
 		color_mapper.SetInputConnection(gm_clipper_max.GetOutputPort())
@@ -222,7 +222,7 @@ class Visualization(object):
 
 		# Render
 		iren.Initialize()
-		renWin.SetWindowName("Project 4b: Isocontours - Pedro Acevedo & Randy Consuegra")
+		renWin.SetWindowName("Project 4b: GeoVisualization - Pedro Acevedo & Randy Consuegra")
 		renWin.Render()
 		iren.Start()
 
